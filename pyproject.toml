@@ -42,7 +42,8 @@ dependencies = [
     "json-repair>=0.30.0, <0.47.0",  # fixes errors in tests when building engine 1.4.4
     "torch>=2.7.0,<2.7.1",  # for vllm 0.9.1 compatibility
     "torchaudio>=2.7.0,<2.7.1",  # for vllm 0.9.1 compatibility
-    "torchvision>=0.22.0,<0.22.1"  # for vllm 0.9.1 compatibility
+    "torchvision>=0.22.0,<0.22.1",  # for vllm 0.9.1 compatibility
+    "mostlyai-qa>=1.9.8",
 ]
 
 [project.optional-dependencies]

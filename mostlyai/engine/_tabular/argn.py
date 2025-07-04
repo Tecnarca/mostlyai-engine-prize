@@ -45,6 +45,7 @@ from mostlyai.engine._tabular.fairness import apply_fairness_transforms
 
 _LOG = logging.getLogger(__name__)
 
+DROPOUT_P=0.15
 
 class ModelSize(str, Enum):
     S = "S"
@@ -116,8 +117,8 @@ def _embedding_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int) 
         return model_size[id]
     model_size_output_dim = dict(
         S=max(10, int(2 * np.ceil(dim_input**0.15))),
-        M=max(10, int(3 * np.ceil(dim_input**0.25))),
-        L=max(10, int(4 * np.ceil(dim_input**0.33))),
+        M=max(10, int(4 * np.ceil(dim_input**0.33))),
+        L=max(25, int(4 * np.ceil(dim_input**0.33))),
     )
     return min(dim_input, model_size_output_dim[model_size])
 
@@ -145,7 +146,7 @@ def _column_embedding_heuristic(
 def _regressor_heuristic(id: str, model_size: ModelSizeOrUnits, dim_input: int, cardinality: int) -> list[int]:
     if isinstance(model_size, dict):
         return model_size[id]
-    model_size_layers = dict(S=[4], M=[16], L=[16, 16])
+    model_size_layers = dict(S=[4], M=[16], L=[24, 24])
     dims = [dim_input]
     layers = model_size_layers[model_size]
     # first layers depend on input dimension
@@ -369,7 +370,7 @@ class FlatContextCompressor(nn.Module):
         self.device = device
 
         self.compressor_layers = nn.ModuleDict()
-        self.dropout = nn.Dropout(p=0.25)
+        self.dropout = nn.Dropout(p=DROPOUT_P)
 
         # flat context embedding layers
         self.embedders = Embedders(
@@ -437,7 +438,7 @@ class SequentialContextCompressor(nn.Module):
 
         self.embedders = nn.ModuleDict()
         self.compressor_layers = nn.ModuleDict()
-        self.dropout = nn.Dropout(p=dropout_rate)
+        self.dropout = nn.Dropout(p=DROPOUT_P)
 
         self.dim_outputs = []
         for table, sub_columns in self.ctxseq_table_sub_columns.items():
@@ -566,7 +567,7 @@ class HistoryCompressor(nn.Module):
         dropout_rate = 0.25
 
         self.compressor_layers = nn.ModuleDict()
-        self.dropout = nn.Dropout(p=dropout_rate)
+        self.dropout = nn.Dropout(p=DROPOUT_P)
 
         dim_input = sum(embedding_dims)
         dims = _history_heuristic(
@@ -634,7 +635,7 @@ class Regressors(nn.Module):
         self.dims_output = {}
 
         self.regressors = nn.ModuleDict()
-        self.dropout = nn.Dropout(p=0.25)
+        self.dropout = nn.Dropout(p=DROPOUT_P)
 
         for sub_column, lookup in self.sub_columns_lookup.items():
             # collect previous sub column embedding dims for current column
@@ -949,6 +950,7 @@ class FlatModel(nn.Module):
         top_p: float | None = None,
         return_probs: list[str] | None = None,
         fairness_transforms: dict[str, Any] | None = None,
+        on_eval=False,
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
@@ -1103,6 +1105,7 @@ class AttentionModule(nn.Module):
         history: torch.Tensor,
         seq_ctxs: list[torch.Tensor],
         seq_ctx_masks: list[torch.Tensor],
+        mode="trn"
     ) -> list[torch.Tensor]:
         attn_ctxs = []
         batch_size, history_len, _ = history.shape
@@ -1116,7 +1119,7 @@ class AttentionModule(nn.Module):
                 key=seq_ctx,
                 value=seq_ctx,
                 attn_mask=mask,
-                dropout_p=0.0,
+                dropout_p=DROPOUT_P if mode == "trn" else 0.0,
                 is_causal=False,
             )  # (batch_size, history_len, hidden_dim)
             attn_ctxs.append(attn_ctx)
@@ -1231,6 +1234,7 @@ class SequentialModel(nn.Module):
         history=None,
         history_state=None,
         context=None,
+        on_eval=False,
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
         fixed_probs = fixed_probs or {}
         fixed_values = fixed_values or {}
@@ -1254,7 +1258,7 @@ class SequentialModel(nn.Module):
 
             flat_ctx, seq_ctx, seq_ctx_masks = context
             # attention with history as query
-            seq_ctx = self.attention(history, seq_ctx, seq_ctx_masks)
+            seq_ctx = self.attention(history, seq_ctx, seq_ctx_masks, mode="trn" if on_eval else "gen")
             # repeat flat context to match the length of history
             flat_ctx = self._repeat_flat_context(flat_ctx, history.size(1))
             context_history = [torch.cat(flat_ctx + seq_ctx + [history], -1)]
@@ -1308,7 +1312,7 @@ class SequentialModel(nn.Module):
 
             flat_ctx, seq_ctx, seq_ctx_masks = context
             # attention between sequential context and history
-            seq_ctx = self.attention(history, seq_ctx, seq_ctx_masks)
+            seq_ctx = self.attention(history, seq_ctx, seq_ctx_masks, mode="gen")
             # repeat flat context to match the length of history
             flat_ctx = self._repeat_flat_context(flat_ctx, history.size(1))
             context_history = [torch.cat(flat_ctx + seq_ctx + [history], -1)]

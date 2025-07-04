@@ -1,155 +1,72 @@
-# Synthetic Data Engine 💎
+# Mostly AI Prize 💎 - Tecnarca's Take
 
-![GitHub Release](https://img.shields.io/github/v/release/mostly-ai/mostlyai-engine)
-[![Documentation](https://img.shields.io/badge/docs-latest-green)](https://mostly-ai.github.io/mostlyai-engine/)
-[![stats](https://pepy.tech/badge/mostlyai-engine)](https://pypi.org/project/mostlyai-engine/)
-![license](https://img.shields.io/github/license/mostly-ai/mostlyai-engine)
-![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mostlyai-engine)
+This codebase is a clone of the Mostly AI Engine. 
 
-[Documentation](https://mostly-ai.github.io/mostlyai-engine/) | [Technical Paper](https://arxiv.org/abs/2501.12012) | [Free Cloud Service](https://app.mostly.ai/)
+It was created to directly modify the engine in order to compete in 2025's [Mostly AI Prize](https://www.mostlyaiprize.com/).
 
-Create high-fidelity privacy-safe synthetic data:
+## Setup
 
-1. prepare, analyze, and encode original data
-2. train a generative model on the encoded data
-3. generate synthetic data samples to your needs:
-    * up-sample / down-sample
-    * conditionally generate
-    * rebalance categories
-    * impute missings
-    * incorporate fairness
-    * adjust sampling temperature
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Tecnarca/mostlyai-engine-prize.git
+   cd mostlyai-engine-prize
+   ```
 
-...all within your safe compute environment, all with a few lines of Python code 💥.
+2. **Install `uv` (if not installed already)**:
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+   For alternative installation methods, visit the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
 
-Note: This library is the underlying model engine of the [Synthetic Data SDK](https://github.com/mostly-ai/mostlyai). Please refer to the latter, for an easy-to-use, higher-level software toolkit.
+3. **Create a virtual environment and install dependencies**:
+   If using GPU, run:
+   ```bash
+   uv sync --frozen --extra gpu --python=3.10
+   source .venv/bin/activate
+   ```
+
+## Running a training job
+
+The `scripts/parametric_train.py` allows you to run a training job for both the Sequential and the Flat challenge.
+
+The script has only one parameter, containing the path to the training dataset (readable with `pandas.read_csv`)
+that you want to train the model on.
+The script will automatically distinguish between a `flat` and `sequential` 
+dataset solely off of the presence (or absence) of the `group_id` column.
+
+This script, regardless of the challenge, is intended to be trained on a GPU,
+so you should run these submission in a `g5.2xlarge` AWS EC2 instance.
+
+#### Commands for training
+   1. Flat
+      ```bash
+      python scripts/parametric_train.py flat-training.csv 
+      ```
+   2. Sequential
+      ```bash
+      python scripts/parametric_train.py sequential-training.csv 
+      ```
+
+When training is complete a csv file with identical size (for flat) or identical number of groups (for sequential)
+can be found in a `output` folder that will be created. 
+The filename will be in the format `[challenge_type]_[estimated_accuracy].csv` where `[challenge_type]` can be
+`flat` or `seq` and `[estimated_accuracy]` will be a float number with 6 digits after comma representing the estimated
+training overall accuracy.
+
+Examples:
+1. running `python scripts/parametric_train.py flat-training.csv` will create `output/flat_0.XXXXXX.csv` 
+2. running `python scripts/parametric_train.py sequential-training.csv` will create `output/seq_0.XXXXXX.csv` 
+
+Note that there is no relation from the input csv folder to the output folder. 
+The output folder will always be in the folder you launch the training command from.
 
 
-## Installation
+### License
 
-The latest release of `mostlyai-engine` can be installed via pip:
+The whole repository was cloned from [here](https://github.com/mostly-ai/mostlyai-engine), 
+for more information on the original package you can check out `ORIGINAL_README.md`
 
-```bash
-pip install -U mostlyai-engine
-```
+The modifications to the engine are released under the Apache 2.0 license, see `LICENSE` for more information.
 
-or alternatively for a GPU setup (needed for LLM finetuning and inference):
-```bash
-pip install -U 'mostlyai-engine[gpu]'
-```
-
-On Linux, one can explicitly install the CPU-only variant of torch together with `mostlyai-engine`:
-
-```bash
-pip install -U torch==2.7.0+cpu torchvision==0.22.0+cpu mostlyai-engine --extra-index-url https://download.pytorch.org/whl/cpu
-```
-
-## Quick start
-
-### Tabular Model: flat data, without context
-
-```python
-from pathlib import Path
-import pandas as pd
-from mostlyai import engine
-
-# set up workspace and default logging
-ws = Path("ws-tabular-flat")
-engine.init_logging()
-
-# load original data
-url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/census"
-trn_df = pd.read_csv(f"{url}/census.csv.gz")
-
-# execute the engine steps
-engine.split(                         # split data as PQT files for `trn` + `val` to `{ws}/OriginalData/tgt-data`
-  workspace_dir=ws,
-  tgt_data=trn_df,
-  model_type="TABULAR",
-)
-engine.analyze(workspace_dir=ws)      # generate column-level statistics to `{ws}/ModelData/tgt-stats/stats.json`
-engine.encode(workspace_dir=ws)       # encode training data to `{ws}/OriginalData/encoded-data`
-engine.train(                         # train model and store to `{ws}/ModelStore/model-data`
-    workspace_dir=ws,
-    max_training_time=1,              # limit TRAIN to 1 minute for demo purposes
-)
-engine.generate(workspace_dir=ws)     # use model to generate synthetic samples to `{ws}/SyntheticData`
-pd.read_parquet(ws / "SyntheticData") # load synthetic data
-```
-
-### Tabular Model: sequential data, with context
-
-```python
-from pathlib import Path
-import pandas as pd
-from mostlyai import engine
-
-engine.init_logging()
-
-# set up workspace and default logging
-ws = Path("ws-tabular-sequential")
-engine.init_logging()
-
-# load original data
-url = "https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/baseball"
-trn_ctx_df = pd.read_csv(f"{url}/players.csv.gz")  # context data
-trn_tgt_df = pd.read_csv(f"{url}/batting.csv.gz")  # target data
-
-# execute the engine steps
-engine.split(                         # split data as PQT files for `trn` + `val` to `{ws}/OriginalData/(tgt|ctx)-data`
-  workspace_dir=ws,
-  tgt_data=trn_tgt_df,
-  ctx_data=trn_ctx_df,
-  tgt_context_key="players_id",
-  ctx_primary_key="id",
-  model_type="TABULAR",
-)
-engine.analyze(workspace_dir=ws)      # generate column-level statistics to `{ws}/ModelStore/(tgt|ctx)-data/stats.json`
-engine.encode(workspace_dir=ws)       # encode training data to `{ws}/OriginalData/encoded-data`
-engine.train(                         # train model and store to `{ws}/ModelStore/model-data`
-    workspace_dir=ws,
-    max_training_time=1,              # limit TRAIN to 1 minute for demo purposes
-)
-engine.generate(workspace_dir=ws)     # use model to generate synthetic samples to `{ws}/SyntheticData`
-pd.read_parquet(ws / "SyntheticData") # load synthetic data
-```
-
-### Language Model: flat data, without context
-
-```python
-from pathlib import Path
-import pandas as pd
-from mostlyai import engine
-
-# init workspace and logging
-ws = Path("ws-language-flat")
-engine.init_logging()
-
-# load original data
-trn_df = pd.read_parquet("https://github.com/mostly-ai/public-demo-data/raw/refs/heads/dev/headlines/headlines.parquet")
-trn_df = trn_df.sample(n=10_000, random_state=42)
-
-# execute the engine steps
-engine.split(                         # split data as PQT files for `trn` + `val` to `{ws}/OriginalData/tgt-data`
-    workspace_dir=ws,
-    tgt_data=trn_df,
-    tgt_encoding_types={
-        'category': 'LANGUAGE_CATEGORICAL',
-        'date': 'LANGUAGE_DATETIME',
-        'headline': 'LANGUAGE_TEXT',
-    }
-)
-engine.analyze(workspace_dir=ws)      # generate column-level statistics to `{ws}/ModelStore/tgt-stats/stats.json`
-engine.encode(workspace_dir=ws)       # encode training data to `{ws}/OriginalData/encoded-data`
-engine.train(                         # train model and store to `{ws}/ModelStore/model-data`
-    workspace_dir=ws,
-    max_training_time=2,                   # limit TRAIN to 2 minute for demo purposes
-    model="MOSTLY_AI/LSTMFromScratch-3m",  # use a light-weight LSTM model, trained from scratch (GPU recommended)
-    # model="microsoft/phi-1.5",           # alternatively use a pre-trained HF-hosted LLM model (GPU required)
-)
-engine.generate(                      # use model to generate synthetic samples to `{ws}/SyntheticData`
-    workspace_dir=ws,
-    sample_size=10,
-)
-pd.read_parquet(ws / "SyntheticData") # load synthetic data
-```
+The `mostlyai/engine/_tabular/training.py` and `mostlyai/engine/_tabular/argn.py` files were modified to improve performance
+in the MOSTLY AI Prize competition. See commit history for more information on how the engine code was adapted.

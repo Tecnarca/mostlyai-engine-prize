@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# This file was modified to enter in the MOSTLY AI competition.
+# See commit history for a clear overview of the modifications.
 
 """
 TabularARGN

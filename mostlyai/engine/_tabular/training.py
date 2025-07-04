@@ -249,12 +249,13 @@ class TabularModelCheckpoint(ModelCheckpoint):
 
 
 def _calculate_sample_losses(
-    model: FlatModel | SequentialModel | GradSampleModule, data: dict[str, torch.Tensor]
+    model: FlatModel | SequentialModel | GradSampleModule, data: dict[str, torch.Tensor], on_eval=False
 ) -> torch.Tensor:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, message="Using a non-full backward hook*")
-        output, _ = model(data, mode="trn")
+        output, _ = model(data, mode="trn", on_eval=on_eval)
     criterion = nn.CrossEntropyLoss(reduction="none")
+    penalty = nn.KLDivLoss(reduction="none")
 
     tgt_cols = (
         list(model.tgt_cardinalities.keys())
@@ -293,10 +294,35 @@ def _calculate_sample_losses(
             column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
             masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask, dim=1), min=1)
             losses_by_column.append(masked_loss)
+        one_hot_inputs = {
+            col: nn.functional.one_hot(data[col].squeeze(2), num_classes=output[col].shape[2]).float()
+            for col in tgt_cols
+        }
+        output_2 = {
+            col: nn.LogSoftmax(dim=-1)(output[col])
+            for col in output
+        }
+        stacked_data = torch.cat(tuple(one_hot_inputs.values()), dim=2)
+        stacked_output = torch.cat(tuple(output_2.values()), dim=2)
+        kl_divergence = penalty(stacked_output, stacked_data).sum(dim=1)
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
+        one_hot_inputs = {
+            col: nn.functional.one_hot(data[col].squeeze(1), num_classes=output[col].shape[1]).float()
+            for col in tgt_cols
+        }
+        output_2 = {
+            col: nn.LogSoftmax(dim=-1)(output[col])
+            for col in output
+        }
+        stacked_data = torch.cat(tuple(one_hot_inputs.values()), dim=1)
+        stacked_output = torch.cat(tuple(output_2.values()), dim=1)
+        kl_divergence = penalty(stacked_output, stacked_data)
+
+    weights = torch.linspace(1.0, 2.0, steps=len(tgt_cols))
+    losses_by_column = [w * loss for w, loss in zip(weights, losses_by_column)]
     # sum up column level losses to get overall losses at sample level
-    losses = torch.sum(torch.stack(losses_by_column, dim=0), dim=0)
+    losses = 1.0*torch.sum(torch.stack(losses_by_column, dim=0), dim=0) + 0.1*kl_divergence.sum(dim=1)
     return losses
 
 
@@ -309,7 +335,7 @@ def _calculate_val_loss(
     val_sample_losses: list[torch.Tensor] = []
     model.eval()
     for step_data in val_dataloader:
-        step_losses = _calculate_sample_losses(model, step_data)
+        step_losses = _calculate_sample_losses(model, step_data, on_eval=True)
         val_sample_losses.extend(step_losses.detach())
     model.train()
     val_sample_losses: torch.Tensor = torch.stack(val_sample_losses, dim=0)
@@ -584,13 +610,13 @@ def train(
         _LOG.info(f"{trn_steps=}, {val_steps=}")
         _LOG.info(f"{batch_size=}, {gradient_accumulation_steps=}, {initial_lr=}")
 
-        early_stopper = EarlyStopper(val_loss_patience=4)
+        early_stopper = EarlyStopper(val_loss_patience=8)
         optimizer = torch.optim.AdamW(params=argn.parameters(), lr=initial_lr)
         lr_scheduler: LRScheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer=optimizer,
             factor=0.5,
             patience=2,
-            min_lr=0.1 * initial_lr,
+            #min_lr=0.1 * initial_lr,
             # threshold=0,  # if we prefer to completely mimic the behavior of previous implementation
         )
         if (
@@ -704,6 +730,7 @@ def train(
                     # if step was not skipped, it was a logical step, and we can stop accumulating gradients
                     stop_accumulating_grads = not optimizer._is_last_step_skipped
                 elif accumulated_steps % gradient_accumulation_steps == 0:
+                    torch.nn.utils.clip_grad_norm_(argn.parameters(), max_norm=1.0)
                     # update parameters with accumulated gradients
                     optimizer.step()
                     stop_accumulating_grads = True
@@ -826,6 +853,13 @@ def train(
             if total_training_time > max_training_time:
                 do_stop = True
 
+        _LOG.info("Saving LAST model i have")
+        model_checkpoint.save_checkpoint(
+                model=argn,
+                optimizer=optimizer,
+                lr_scheduler=lr_scheduler,
+                dp_accountant=privacy_engine.accountant if with_dp else None,
+            )
         # no checkpoint is saved yet because the training stopped before the first epoch ended
         if not model_checkpoint.has_saved_once():
             _LOG.info("saving model weights, as none were saved so far")

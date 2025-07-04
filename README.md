@@ -60,6 +60,7 @@ Examples:
 Note that there is no relation from the input csv folder to the output folder. 
 The output folder will always be in the folder you launch the training command from.
 
+I have uploaded the Stage 1 datasets in `scripts/stage_1_datasets` in case you want to test the above commands.
 
 ### License
 

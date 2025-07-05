@@ -1,73 +1,109 @@
-# Mostly AI Prize 💎 - Tecnarca's Take
+# 💎 Mostly AI Prize – Tecnarca’s Take
 
-This codebase is a clone of the Mostly AI Engine. 
+This repository is a customized fork of the [Mostly AI Engine](https://github.com/mostly-ai/mostlyai-engine), developed specifically for participation in the [2025 Mostly AI Prize](https://www.mostlyaiprize.com/).
 
-It was created to directly modify the engine in order to compete in 2025's [Mostly AI Prize](https://www.mostlyaiprize.com/).
+It enables direct modification of the engine to tailor it for high-performance synthetic data generation in both the **flat** and **sequential** challenges.
 
-## Setup
+---
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/Tecnarca/mostlyai-engine-prize.git
-   cd mostlyai-engine-prize
-   ```
+## 🛠️ Setup
 
-2. **Install `uv` (if not installed already)**:
-   ```bash
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
-   For alternative installation methods, visit the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
+Follow these steps to get the environment ready:
 
-3. **Create a virtual environment and install dependencies**:
-   If using GPU, run:
-   ```bash
-   uv sync --frozen --extra gpu --python=3.10
-   source .venv/bin/activate
-   ```
+### 1. Clone the Repository
+```bash
+git clone https://github.com/Tecnarca/mostlyai-engine-prize.git
+cd mostlyai-engine-prize
+```
 
-## Running a training job
+### 2. Install `uv` (if not already installed)
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+For alternative installation methods, refer to the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
 
-The `scripts/parametric_train.py` allows you to run a training job for both the Sequential and the Flat challenge.
+### 3. Create Virtual Environment and Install Dependencies
+If you're using a GPU:
+```bash
+uv sync --frozen --extra gpu --python=3.10
+source .venv/bin/activate
+```
 
-The script has only one parameter, containing the path to the training dataset (readable with `pandas.read_csv`)
-that you want to train the model on.
-The script will automatically distinguish between a `flat` and `sequential` 
-dataset solely off of the presence (or absence) of the `group_id` column.
+---
 
-This script, regardless of the challenge, is intended to be trained on a GPU,
-so you should run these submission in a `g5.2xlarge` AWS EC2 instance.
+## 🚀 Running a Training Job
 
-#### Commands for training
-   1. Flat
-      ```bash
-      python scripts/parametric_train.py flat-training.csv 
-      ```
-   2. Sequential
-      ```bash
-      python scripts/parametric_train.py sequential-training.csv 
-      ```
+Use the script at `scripts/parametric_train.py` to train a model for either challenge type.
 
-When training is complete a csv file with identical size (for flat) or identical number of groups (for sequential)
-can be found in a `output` folder that will be created. 
-The filename will be in the format `[challenge_type]_[estimated_accuracy].csv` where `[challenge_type]` can be
-`flat` or `seq` and `[estimated_accuracy]` will be a float number with 6 digits after comma representing the estimated
-training overall accuracy.
+### Script Usage
+```bash
+python scripts/parametric_train.py <path_to_training_dataset.csv>
+```
 
-Examples:
-1. running `python scripts/parametric_train.py flat-training.csv` will create `output/flat_0.XXXXXX.csv` 
-2. running `python scripts/parametric_train.py sequential-training.csv` will create `output/seq_0.XXXXXX.csv` 
+- The script auto-detects the dataset type:
+  - If the CSV has a `group_id` column → **Sequential Challenge**
+  - Otherwise → **Flat Challenge**
 
-Note that there is no relation from the input csv folder to the output folder. 
-The output folder will always be in the folder you launch the training command from.
+> **Note:** GPU is required for training. Run this on an AWS EC2 instance such as `g5.2xlarge`.
 
-I have uploaded the Stage 1 datasets in `scripts/stage_1_datasets` in case you want to test the above commands.
+### Example Commands
+#### 🔹 Flat Training
+```bash
+python scripts/parametric_train.py flat-training.csv
+```
+#### 🔹 Sequential Training
+```bash
+python scripts/parametric_train.py sequential-training.csv
+```
 
-### License
+---
 
-The whole repository was cloned from [here](https://github.com/mostly-ai/mostlyai-engine), 
-for more information on the original package you can check out `ORIGINAL_README.md`
+## 📂 Output Format
 
-The modifications to the engine are released under the Apache 2.0 license, see `LICENSE` for more information.
+Once training completes:
 
-The `mostlyai/engine/_tabular/training.py` and `mostlyai/engine/_tabular/argn.py` files were modified to improve performance
-in the MOSTLY AI Prize competition. See commit history for more information on how the engine code was adapted.
+- A CSV will be saved in an automatically created `output/` folder.
+- Output file naming convention:  
+  ```
+  [challenge_type]_[estimated_accuracy].csv
+  ```
+  where:
+  - `[challenge_type]` is either `flat` or `seq`
+  - `[estimated_accuracy]` is a 6-digit float (e.g., `0.941238`)
+
+### Examples
+1. Flat:  
+   Input → `flat-training.csv`  
+   Output → `output/flat_0.941238.csv`
+
+2. Sequential:  
+   Input → `sequential-training.csv`  
+   Output → `output/seq_0.928417.csv`
+
+> 📌 The output folder is always created in the directory where you run the training script, regardless of input file location.
+
+---
+
+## 🧪 Test Datasets
+
+Stage 1 sample datasets are available at:
+```
+scripts/stage_1_datasets/
+```
+Use these to test your setup and verify correct output.
+
+---
+
+## 📄 License & Attribution
+
+- **Base Engine**: Cloned from [Mostly AI Engine](https://github.com/mostly-ai/mostlyai-engine)  
+  → See `ORIGINAL_README.md` for details on the original package.
+
+- **License**: Modifications are released under the Apache 2.0 license (see `LICENSE`).
+
+- **Engine Modifications**:
+  - Key files altered:  
+    - `mostlyai/engine/_tabular/training.py`  
+    - `mostlyai/engine/_tabular/argn.py`  
+  - Purpose: Performance tuning for the Mostly AI Prize  
+  - Review the commit history for details on the changes.

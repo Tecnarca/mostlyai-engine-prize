@@ -282,6 +282,7 @@ def _calculate_sample_losses(
         sidx_cols = {k for k in data if k.startswith(SIDX_SUB_COLUMN_PREFIX)}
         sdec_cols = {k for k in data if k.startswith(SDEC_SUB_COLUMN_PREFIX)}
         losses_by_column = []
+        kl_losses_by_column = []
         for col in tgt_cols:
             if col in slen_cols:
                 # mask out SLEN for steps > 1
@@ -294,38 +295,43 @@ def _calculate_sample_losses(
                 # mask out paddings
                 mask = slen_mask
 
-            column_loss = criterion(output[col].transpose(1, 2), data[col].squeeze(2))
-            masked_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask, dim=1), min=1)
-            losses_by_column.append(masked_loss)
-        one_hot_inputs = {
-            col: nn.functional.one_hot(data[col].squeeze(2), num_classes=output[col].shape[2]).float()
-            for col in tgt_cols
-        }
-        output_2 = {
-            col: nn.LogSoftmax(dim=-1)(output[col])
-            for col in output
-        }
-        stacked_data = torch.cat(tuple(one_hot_inputs.values()), dim=2)
-        stacked_output = torch.cat(tuple(output_2.values()), dim=2)
-        kl_divergence = penalty(stacked_output, stacked_data).sum(dim=1)
+            col_logits = output[col].transpose(1, 2)
+            col_targets = data[col].squeeze(2)
+            column_loss = criterion(col_logits, col_targets)
+            masked_ce_loss = torch.sum(column_loss * mask, dim=1) / torch.clamp(torch.sum(mask, dim=1), min=1)
+            losses_by_column.append(masked_ce_loss)
+
+            log_probs = nn.functional.log_softmax(output[col], dim=-1)
+            target_probs = nn.functional.one_hot(col_targets, num_classes=output[col].shape[2]).float()
+
+            kl_div_loss = penalty(log_probs, target_probs).sum(dim=-1)
+            masked_kl_loss = torch.sum(kl_div_loss * mask, dim=1) / torch.clamp(torch.sum(mask, dim=1), min=1)
+            kl_losses_by_column.append(masked_kl_loss)
+
+        losses_by_column = [w * loss for w, loss in zip(torch.linspace(1.0, 2.0, steps=len(tgt_cols)), losses_by_column)]
+
+        ce_loss_total = torch.sum(torch.stack(losses_by_column, dim=0), dim=0)
+        kl_loss_total = torch.sum(torch.stack(kl_losses_by_column, dim=0), dim=0)
+
+        losses = ce_loss_total + 0.2 * kl_loss_total
+
     else:
         losses_by_column = [criterion(output[col], data[col].squeeze(1)) for col in tgt_cols]
         one_hot_inputs = {
             col: nn.functional.one_hot(data[col].squeeze(1), num_classes=output[col].shape[1]).float()
             for col in tgt_cols
         }
-        output_2 = {
-            col: nn.LogSoftmax(dim=-1)(output[col])
-            for col in output
-        }
+        output_log_probs = {col: nn.LogSoftmax(dim=-1)(output[col]) for col in output}
         stacked_data = torch.cat(tuple(one_hot_inputs.values()), dim=1)
-        stacked_output = torch.cat(tuple(output_2.values()), dim=1)
-        kl_divergence = penalty(stacked_output, stacked_data)
+        stacked_output = torch.cat(tuple(output_log_probs.values()), dim=1)
+        kl_divergence = penalty(stacked_output, stacked_data).sum(dim=1)
 
-    weights = torch.linspace(1.0, 2.0, steps=len(tgt_cols))
-    losses_by_column = [w * loss for w, loss in zip(weights, losses_by_column)]
-    # sum up column level losses to get overall losses at sample level
-    losses = 1.0*torch.sum(torch.stack(losses_by_column, dim=0), dim=0) + 0.1*kl_divergence.sum(dim=1)
+        weights = torch.linspace(1.0, 2.0, steps=len(tgt_cols))
+        losses_by_column = [w * loss for w, loss in zip(weights, losses_by_column)]
+        ce_loss_total = torch.sum(torch.stack(losses_by_column, dim=0), dim=0)
+
+        losses = ce_loss_total + 0.2 * kl_divergence
+
     return losses
 
 

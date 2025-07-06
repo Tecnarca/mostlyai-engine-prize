@@ -8,6 +8,9 @@ It enables direct modification of the engine to tailor it for high-performance s
 
 ## 🛠️ Setup
 
+> **Note:** GPU is required for training. Run this on a GPU-Powered machine, such as AWS EC2 `g5.2xlarge`.
+
+
 Follow these steps to get the environment ready:
 
 ### 1. Clone the Repository
@@ -23,7 +26,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 For alternative installation methods, refer to the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
 
 ### 3. Create Virtual Environment and Install Dependencies
-If you're using a GPU:
+GPU is required for training, so also install the optional dependencies.
 ```bash
 uv sync --frozen --extra gpu --python=3.10
 source .venv/bin/activate
@@ -33,7 +36,7 @@ source .venv/bin/activate
 
 ## 🚀 Running a Training Job
 
-Use the script at `scripts/parametric_train.py` to train a model for either challenge type.
+Use the script at `scripts/parametric_train.py` to train and predict a model for either challenge type.
 
 ### Script Usage
 ```bash
@@ -43,8 +46,6 @@ python scripts/parametric_train.py <path_to_training_dataset.csv>
 - The script auto-detects the dataset type:
   - If the CSV has a `group_id` column → **Sequential Challenge**
   - Otherwise → **Flat Challenge**
-
-> **Note:** GPU is required for training. Run this on an AWS EC2 instance such as `g5.2xlarge`.
 
 ### Example Commands
 #### 🔹 Flat Training
@@ -81,6 +82,46 @@ Once training completes:
    Output → `output/seq_0.928417.csv`
 
 > 📌 The output folder is always created in the directory where you run the training script, regardless of input file location.
+
+---
+
+## ⚡ Methodological improvements
+
+TabularARGN is a robust model for synthetic data generation. To further enhance its performance, several key improvements were implemented, primarily targeting generation accuracy.
+
+### Data Preparation
+
+The dataset preparation **only** involves feature reordering, crucial for TabularARGN’s training effectiveness:
+
+- **Feature Order Importance:** "Easy-to-learn" features are prioritized to optimize model learning.
+- **Flat Challenge:** Features are sorted primarily by the smallest number of unique values. In cases of ties, features with the highest frequency of their mode come first.
+- **Sequential Challenge:** Features are sorted by ascending frequency of their mode.
+
+### Training and Sampling Strategy
+
+- Multiple TabularARGN models (either 2 or 10) are trained to ensure selection of the best-performing model.
+- Multiple datasets are sampled from the best model, with only the highest-quality sample retained as the final output.
+
+### Improvements to Loss Function
+
+Significant enhancements were made to the TabularARGN loss function to achieve better accuracy and calibration:
+
+- **KL-Divergence Penalty:**
+  - Minimizing cross-entropy alone can lead to overly confident predictions.
+  - Incorporating a KL-divergence penalty helps maintain better calibrated probability outputs.
+
+- **Per-feature Loss Weighting:**
+  - Later-stage feature predictions (those benefiting from previously predicted columns) are penalized more for inaccuracies.
+  - Column losses are scaled linearly from 1.0 (initial features) up to 2.0 (final features).
+
+### Additional Optimizations
+
+Further minor adjustments include:
+
+- **Reduced Dropout:** Decreased from 0.25 to 0.15, improving performance due to less aggressive regularization.
+- **Attention Module Dropout:** Specifically for the sequential challenge, added dropout to the attention mechanism generating `seq_ctx` to reduce the model's reliance on attention.
+- **Allow bigger Network Size:** Enabling larger architectures when beneficial on the regressor and embedding heuristics.
+
 
 ---
 

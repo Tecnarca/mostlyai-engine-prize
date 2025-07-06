@@ -87,24 +87,24 @@ Once training completes:
 
 ## ⚡ Methodological improvements
 
-TabularARGN is a robust model for synthetic data generation. To further enhance its performance, several key improvements were implemented, primarily targeting generation accuracy.
+TabularARGN is a robust model for synthetic data generation. Several key improvements were implemented targeting generation accuracy.
 
 ### Data Preparation
 
 The dataset preparation **only** involves feature reordering, crucial for TabularARGN’s training effectiveness:
 
-- **Feature Order Importance:** "Easy-to-learn" features are prioritized to optimize model learning.
-- **Flat Challenge:** Features are sorted primarily by the smallest number of unique values. In cases of ties, features with the highest frequency of their mode come first.
+- **Feature Order Importance:** "Easy-to-learn" features are moved first to optimize model learning.
+- **Flat Challenge:** Features are sorted by the smallest number of unique values. To break ties, features with higher mode frequency come first.
 - **Sequential Challenge:** Features are sorted by ascending frequency of their mode.
 
 ### Training and Sampling Strategy
 
-- Multiple TabularARGN models (either 2 or 10) are trained to ensure selection of the best-performing model.
+- Multiple TabularARGN models are trained to ensure selection of the best-performing model.
 - Multiple datasets are sampled from the best model, with only the highest-quality sample retained as the final output.
 
 ### Improvements to Loss Function
 
-Significant enhancements were made to the TabularARGN loss function to achieve better accuracy and calibration:
+The most impactful changes were made to the TabularARGN loss function to achieve better accuracy and calibration:
 
 - **KL-Divergence Penalty:**
   - Minimizing cross-entropy alone can lead to overly confident predictions.
@@ -116,11 +116,9 @@ Significant enhancements were made to the TabularARGN loss function to achieve b
 
 ### Additional Optimizations
 
-Further minor adjustments include:
-
 - **Reduced Dropout:** Decreased from 0.25 to 0.15, improving performance due to less aggressive regularization.
-- **Attention Module Dropout:** Specifically for the sequential challenge, added dropout to the attention mechanism generating `seq_ctx` to reduce the model's reliance on attention.
-- **Allow bigger Network Size:** Enabling larger architectures when beneficial on the regressor and embedding heuristics.
+- **Attention Module Dropout:** To reduce model's reliance on the attention mechanism, dropout was added.
+- **Allow bigger Network Size:** Allowed wider architectures when beneficial on the regressor and embedding heuristics.
 
 
 ---

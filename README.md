@@ -2,7 +2,9 @@
 
 This repository is a customized fork of the [Mostly AI Engine](https://github.com/mostly-ai/mostlyai-engine), developed specifically for participation in the [2025 Mostly AI Prize](https://www.mostlyaiprize.com/).
 
-It enables direct modification of the engine to tailor it for high-performance synthetic data generation in both the **flat** and **sequential** challenges.
+This submission scored second place in both the sequential and flat challenges of the competition. See [here](https://github.com/mostly-ai/the-prize-eval) for the complete competition evaluation.
+
+This repo implements direct modification of the engine to tailor it for high-performance synthetic data generation in both the **flat** and **sequential** challenges.
 
 ---
 
